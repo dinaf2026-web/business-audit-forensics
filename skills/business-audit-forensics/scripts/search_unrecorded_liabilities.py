@@ -39,7 +39,7 @@ from decimal import Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audit_common import (  # noqa: E402
-    detect_dayfirst, new_workbook, normalize_name, parse_amount, parse_date,
+    ROW_KEY, detect_dayfirst, new_workbook, normalize_name, parse_amount, parse_date,
     pick_column, provenance_banner, read_table, save_workbook,
     validate_numeric_column, write_sheet,
 )
@@ -52,8 +52,9 @@ def load_payments(path, args):
     headers, rows = read_table(path)
     date_col = pick_column(headers, ["date", "payment date", "transaction date",
                                      "posting date"], label="payment date")
-    amt_col = pick_column(headers, ["amount", "payment", "value", "debit"],
-                          label="amount")
+    amt_col = pick_column(headers, ["amount", "payment", "value"],
+                          label="amount",
+                          exclude=("debit", "credit"))
     payee_col = pick_column(headers, ["payee", "vendor", "description", "name",
                                       "memo", "details"], required=False)
     svc_col = pick_column(headers, ["service date", "service period",
@@ -66,7 +67,8 @@ def load_payments(path, args):
 
     raw = []
     bad = []
-    for i, row in enumerate(rows, start=2):
+    for row in rows:
+        i = row.get(ROW_KEY)
         d = parse_date(row.get(date_col), dayfirst=dayfirst)
         a = parse_amount(row.get(amt_col))
         if d is None or a is None:
@@ -122,7 +124,8 @@ def load_recorded(path, args):
     amt_col = pick_column(headers, ["amount", "balance", "total", "open"],
                           label="recorded amount")
     out, bad = [], []
-    for i, row in enumerate(rows, start=2):
+    for row in rows:
+        i = row.get(ROW_KEY)
         a = parse_amount(row.get(amt_col))
         name = str(row.get(payee_col) or "").strip()
         if a is None or not name:

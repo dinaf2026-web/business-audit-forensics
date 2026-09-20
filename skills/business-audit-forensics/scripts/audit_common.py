@@ -23,6 +23,9 @@ from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 
+# Key under which every record carries its TRUE source row.
+ROW_KEY = "__source_row__"
+
 FONT_NAME = "Arial"
 BODY_PT = 12
 HEADER_PT = 12
@@ -263,7 +266,16 @@ def read_table(path, sheet=None, header_contains=None):
         with open(path, "r", encoding="utf-8-sig", newline="") as fh:
             reader = csv.DictReader(fh, delimiter=delim)
             headers = list(reader.fieldnames or [])
-            rows = [dict(r) for r in reader]
+            rows = []
+            for rec in reader:
+                d = dict(rec)
+                # TRUE file row, so a "Source row" citation in a workpaper
+                # lands on the right line. Callers previously used
+                # enumerate(start=2), which drifts by one for every blank row
+                # the reader skips: a GL with a separator row between months
+                # offset every subsequent citation.
+                d[ROW_KEY] = reader.line_num
+                rows.append(d)
         # header_contains was previously enforced for XLSX only, so a caller
         # asking for validation on a CSV got none and no error. That left the
         # single guard against reading a note line as a header with a hole in
@@ -285,34 +297,50 @@ def read_table(path, sheet=None, header_contains=None):
         return headers, rows
 
     if ext in (".xlsx", ".xlsm"):
-        wb = load_workbook(path, data_only=True, read_only=True)
+        # Walked by explicit row index rather than by iterator position, so
+        # every record carries its TRUE sheet row. Callers previously numbered
+        # records with enumerate(start=2), which drifts by one for every blank
+        # row skipped, so a "Source row" citation in a workpaper pointed at
+        # the wrong line.
+        wb = load_workbook(path, data_only=True)
         ws = wb[sheet] if sheet else wb[wb.sheetnames[0]]
-        rows_iter = ws.iter_rows(values_only=True)
+        out = []
+        header_row = None
         headers = []
-        for raw in rows_iter:
-            if not raw or not any(c is not None and str(c).strip() for c in raw):
+        for r in range(1, ws.max_row + 1):
+            values = [ws.cell(row=r, column=c).value
+                      for c in range(1, ws.max_column + 1)]
+            if not any(v is not None and str(v).strip() for v in values):
                 continue
-            candidate = [str(c).strip() if c is not None else "" for c in raw]
+            candidate = [str(v).strip() if v is not None else "" for v in values]
             if header_contains:
                 present = set(candidate)
-                if not all(want in present for want in header_contains):
+                if not all(w in present for w in header_contains):
                     continue
             headers = candidate
+            header_row = r
             break
-        if header_contains and not headers:
+
+        if header_contains and header_row is None:
             wb.close()
             raise SystemExit(
                 "Could not find a header row containing %s in sheet '%s' of %s. "
                 "Refusing to continue: reading the wrong row as a header would "
                 "compare an empty set and report it as clean."
                 % (", ".join(header_contains), sheet or "(first)", path))
-        out = []
-        for raw in rows_iter:
-            if raw is None or not any(c is not None and str(c).strip() != "" for c in raw):
+        if header_row is None:
+            wb.close()
+            return [], []
+
+        for r in range(header_row + 1, ws.max_row + 1):
+            values = [ws.cell(row=r, column=c).value
+                      for c in range(1, ws.max_column + 1)]
+            if not any(v is not None and str(v).strip() != "" for v in values):
                 continue
             record = {}
             for i, head in enumerate(headers):
-                record[head] = raw[i] if i < len(raw) else None
+                record[head] = values[i] if i < len(values) else None
+            record[ROW_KEY] = r
             out.append(record)
         wb.close()
         return headers, out

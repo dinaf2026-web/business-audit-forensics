@@ -19,6 +19,7 @@ given? It reports UNCHANGED, CHANGED, MISSING, and NEW per item.
 
 import argparse
 import os
+import re
 import stat
 import sys
 from datetime import datetime
@@ -40,7 +41,7 @@ DESCRIBE = [
     (("p&l", "pl", "profit", "income"), "Profit and loss"),
     (("balance sheet", "bs"), "Balance sheet"),
     (("1099", "w-2", "w2", "k-1", "k1"), "Tax information return"),
-    (("return", "1040", "1065", "1120"), "Tax return"),
+    (("tax return", "1040", "1065", "1120"), "Tax return"),
     (("invoice", "inv"), "Invoice"),
     (("payroll",), "Payroll record"),
     (("agreement", "contract", "operating"), "Agreement or contract"),
@@ -52,10 +53,25 @@ DESCRIBE = [
 
 
 def guess_description(name):
+    """Best-effort label for the Description column.
+
+    Short keys are matched on WORD BOUNDARIES. Matched as bare substrings in
+    list order they produced confident nonsense in a chain-of-custody record:
+      Inventory Count.xlsx      contains 'inv'    -> "Invoice"
+      2025 Project Budget.xlsx  contains 'je'     -> "Journal entries"
+      Supplier List.xlsx        contains 'pl'     -> "Profit and loss"
+      Returns and Allowances    contains 'return' -> "Tax return"
+    Same ordering-plus-loose-keyword shape as the classifier bug fixed in
+    rollforward_diff.py. This field is part of an evidence record, so a
+    plausible wrong answer is worse than none.
+    """
     low = name.lower()
     for keys, label in DESCRIBE:
         for key in keys:
-            if key in low:
+            if len(key) <= 4 or not key.isalpha():
+                if re.search(r"(?<![a-z0-9])" + re.escape(key) + r"(?![a-z0-9])", low):
+                    return label
+            elif key in low:
                 return label
     return ""
 
@@ -126,13 +142,18 @@ def collect(root, received_from, received_how, skipped=None):
     for idx, full in enumerate(walk_files(root, skipped), start=1):
         rel = os.path.relpath(full, root)
         st = os.stat(full)
+        sha = sha256_file(full)
         rows.append({
-            "id": "E-%03d" % idx,
+            # Derived from the CONTENT, not the walk position. Positional
+            # ids renumbered whenever a file was added that sorted earlier,
+            # so a workpaper citing E-012 silently pointed at a different
+            # document and the two registers gave no sign they disagreed.
+            "id": "E-" + sha[:8].upper(),
             "rel": rel.replace("\\", "/"),
             "name": os.path.basename(full),
             "ext": os.path.splitext(full)[1].lower().lstrip("."),
             "size": st.st_size,
-            "sha256": sha256_file(full),
+            "sha256": sha,
             "modified": datetime.fromtimestamp(st.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
             "logged": stamp(),
             "from": received_from,
@@ -388,11 +409,20 @@ def verify(args):
     out = save_workbook(wb, args.output or (os.path.splitext(reg_path)[0] + " - verification.xlsx"))
     print("Verification written: %s" % out)
     print("UNCHANGED %d | CHANGED %d | MISSING %d | NEW %d" % (unchanged, changed, missing, new))
+    if new:
+        print("")
+        print("%d file(s) appeared in the intake folder after intake. That is "
+              "a custody event and must be logged." % new)
     if changed or missing:
         print("")
         print("STOP. At least one item is not what it was at intake.")
         print("Do not report findings from a changed or missing source until it is explained.")
         return 2
+    if new:
+        # A custody event, not an integrity breach. Distinct code so an
+        # automated caller does not read it as either a clean run or a
+        # tampering alert.
+        return 3
     return 0
 
 

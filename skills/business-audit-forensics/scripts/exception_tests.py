@@ -29,7 +29,7 @@ from decimal import Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audit_common import (  # noqa: E402
-    new_workbook, normalize_name, parse_amount, parse_date, pick_column,
+    ROW_KEY, new_workbook, normalize_name, parse_amount, parse_date, pick_column,
     provenance_banner, read_table, save_workbook, write_sheet,
 )
 
@@ -52,6 +52,11 @@ def month_end(d):
 def t_exact_duplicates(txns, cfg):
     groups = defaultdict(list)
     for t in txns:
+        # Rows with no payee data are skipped. Grouping them on an empty
+        # norm reported every same-date same-amount pair in the file as
+        # "Same date, amount and payee" when there was no payee at all.
+        if not t["norm"]:
+            continue
         groups[(t["date"], t["amount"], t["norm"])].append(t)
     hits = []
     for key, items in groups.items():
@@ -65,6 +70,8 @@ def t_exact_duplicates(txns, cfg):
 def t_near_duplicates(txns, cfg):
     groups = defaultdict(list)
     for t in txns:
+        if not t["norm"]:
+            continue
         groups[(t["amount"], t["norm"])].append(t)
     hits = []
     for key, items in groups.items():
@@ -349,7 +356,8 @@ def main():
 
     txns = []
     not_screened = []
-    for i, row in enumerate(rows, start=2):
+    for row in rows:
+        i = row.get(ROW_KEY)
         d = parse_date(row.get(date_col), dayfirst=args.dayfirst)
         a = parse_amount(row.get(amt_col))
         if d is None or a is None:

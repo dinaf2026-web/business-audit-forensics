@@ -149,6 +149,7 @@ def load_balances(path, args, which):
 
     balances = {}
     raw_names = {}
+    dupes = []
     skipped = 0
     for row in rows:
         name = str(row.get(acct_col) or "").strip()
@@ -165,11 +166,19 @@ def load_balances(path, args, which):
             skipped += 1
             continue
         key = name.upper()
+        if key in balances:
+            # Two sub-accounts exported flat under the same leaf name merge
+            # into one synthetic row, so the account count understates the
+            # population and the delta is a sum of unrelated movements.
+            dupes.append(name)
         balances[key] = balances.get(key, ZERO) + amount
         raw_names.setdefault(key, name)
 
     basis = ("balance column '%s'" % bal_col) if bal_col else (
         "debit '%s' less credit '%s'" % (deb_col, cre_col))
+    if dupes:
+        basis += "; %d duplicate account name(s) merged: %s" % (
+            len(dupes), ", ".join(sorted(set(dupes))[:8]))
     return balances, raw_names, basis, skipped
 
 

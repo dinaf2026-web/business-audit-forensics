@@ -132,6 +132,24 @@ def heading(doc, text, size=15):
     return para(doc, text, size=size, bold=True)
 
 
+class Sections(object):
+    """Numbers sections as they are actually emitted.
+
+    Numbers were hard-coded while several sections are conditional, so a
+    report with no Background ran 1, 2, 4. A deliverable meant to be cited by
+    section number, and to survive scrutiny, must not look like it is missing
+    pages.
+    """
+
+    def __init__(self, doc):
+        self.doc = doc
+        self.n = 0
+
+    def add(self, title):
+        self.n += 1
+        return heading(self.doc, "%d. %s" % (self.n, title))
+
+
 def bullets(doc, items):
     for item in items or []:
         p = doc.add_paragraph(style="List Bullet")
@@ -156,10 +174,11 @@ def build(data, out_path):
     if meta:
         para(doc, "   ".join(meta), size=12, italic=True)
 
-    heading(doc, "1. Assignment")
+    sec = Sections(doc)
+    sec.add("Assignment")
     para(doc, data.get("assignment", ""))
 
-    heading(doc, "2. Scope and limitations")
+    sec.add("Scope and limitations")
     scope = data.get("scope", {}) or {}
     if scope.get("period"):
         para(doc, "Period examined: %s" % scope["period"], bold=True)
@@ -185,20 +204,31 @@ def build(data, out_path):
         para(doc, custom, italic=True)
 
     if data.get("background"):
-        heading(doc, "3. Background")
+        sec.add("Background")
         para(doc, data["background"])
 
-    heading(doc, "4. Methodology")
+    sec.add("Methodology")
     bullets(doc, data.get("methodology"))
 
     if data.get("what_reconciled"):
-        heading(doc, "5. What reconciled")
+        sec.add("What reconciled")
         bullets(doc, data["what_reconciled"])
 
     findings = data.get("findings") or []
-    heading(doc, "6. Findings")
+    sec.add("Findings")
     if not findings:
-        para(doc, "No findings.")
+        # Asserting an absence requires having examined something. Previously
+        # an empty or partly filled JSON produced "No findings." under a
+        # heading with an empty Methodology section above it.
+        if not (data.get("methodology") and data.get("what_reconciled")):
+            raise SystemExit(
+                "The report has no findings AND no methodology or "
+                "what-reconciled content. Refusing to assert an absence of "
+                "findings on the strength of an empty file. Fill in what was "
+                "examined first.")
+        para(doc, "No findings are reported in this document. The procedures "
+                  "performed are described above; procedures not performed are "
+                  "listed in Scope and limitations.")
     for f in findings:
         para(doc, "%s  [%s]  %s" % (f.get("id", ""), f.get("severity", ""),
                                     f.get("heading", "")), size=13, bold=True)
@@ -210,14 +240,14 @@ def build(data, out_path):
                  size=12, italic=True)
 
     if data.get("open_questions"):
-        heading(doc, "7. Open questions")
+        sec.add("Open questions")
         para(doc, "These could not be resolved from the records produced. They "
                   "are stated as questions and are not findings.")
         bullets(doc, data["open_questions"])
 
     q = data.get("quantification") or {}
     if any(q.values()):
-        heading(doc, "8. Quantification")
+        sec.add("Quantification")
         if q.get("model"):
             para(doc, "Model used: %s" % q["model"], bold=True)
         if q.get("why_this_model"):
@@ -229,7 +259,7 @@ def build(data, out_path):
             para(doc, "Sensitivity: %s" % q["sensitivity"])
 
     if data.get("recommendations"):
-        heading(doc, "9. Recommendations")
+        sec.add("Recommendations")
         bullets(doc, data["recommendations"])
 
     staged = os.path.join(tempfile.gettempdir(),

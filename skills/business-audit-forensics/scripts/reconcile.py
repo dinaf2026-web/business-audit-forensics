@@ -31,7 +31,7 @@ from decimal import Decimal
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from audit_common import (  # noqa: E402
-    detect_dayfirst, hashes_match, new_workbook, parse_amount, parse_date,
+    ROW_KEY, detect_dayfirst, hashes_match, new_workbook, parse_amount, parse_date,
     pick_column, provenance_banner, read_table, save_workbook,
     validate_numeric_column, write_sheet,
 )
@@ -74,7 +74,8 @@ def load_lines(path, args, which):
 
     out = []
     unparsable = []
-    for i, row in enumerate(rows, start=2):
+    for row in rows:
+        i = row.get(ROW_KEY)
         d = parse_date(row.get(date_col), dayfirst=dayfirst)
         if amt_col:
             amt = parse_amount(row.get(amt_col))
