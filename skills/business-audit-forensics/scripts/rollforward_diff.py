@@ -49,6 +49,15 @@ TOL = Decimal("0.01")
 # "owner". Those words describe WHO, not WHAT, and they appear on both sides
 # of the line.
 CLASS_KEYWORDS = [
+    # INCOME and EXPENSE are tested FIRST, on explicit words only. The ASSET
+    # list contains 'depreciation', 'bank', 'vehicle', 'property', 'equipment'
+    # and 'deposit', so with ASSET earlier in the order "Depreciation Expense",
+    # "Bank Fees", "Vehicle Expense" and "Property Tax Expense" all classified
+    # as ASSET. Same ordering defect as the EQUITY-before-LIABILITY bug, one
+    # level down.
+    ("EXPENSE", ("expense", "cost of", "cogs", "payroll expense", "fees",
+                 "amortization", "depreciation expense")),
+    ("INCOME", ("income", "revenue", "sales", "royalt", "earned")),
     ("LIABILITY", ("loan", "note payable", "payable", "liability", "accrued",
                    "debt", "mortgage", "line of credit", "credit card",
                    "deferred", "due to", "owed")),
@@ -58,9 +67,8 @@ CLASS_KEYWORDS = [
     ("ASSET", ("cash", "bank", "checking", "savings", "receivable",
                "inventory", "prepaid", "equipment", "vehicle", "property",
                "asset", "depreciation", "due from", "deposit")),
-    ("INCOME", ("income", "revenue", "sales", "royalt")),
-    ("EXPENSE", ("expense", "cost of", "cogs", "payroll", "rent", "utilities",
-                 "insurance", "fees", "interest expense", "subscription")),
+    ("EXPENSE_TAIL", ("payroll", "rent", "utilities", "insurance",
+                      "subscription", "interest")),
 ]
 
 SUSPENSE_HINTS = ("suspense", "clearing", "ask my accountant", "uncategorized",
@@ -80,7 +88,7 @@ def classify(name):
     for label, keys in CLASS_KEYWORDS:
         for key in keys:
             if key in low:
-                return label
+                return "EXPENSE" if label == "EXPENSE_TAIL" else label
     return "UNKNOWN"
 
 
@@ -98,13 +106,42 @@ def load_balances(path, args, which):
     bal_col = args.balance_col
     deb_col = args.debit_col
     cre_col = args.credit_col
+    # Validate any explicit override against THIS file's headers. Applying an
+    # override blindly to both files meant that if the second file used a
+    # different header, every row was skipped and every prior account was
+    # reported DISAPPEARED: hundreds of false findings from one typo.
+    for label_, col in (("--account-col", args.account_col),
+                        ("--balance-col", args.balance_col),
+                        ("--debit-col", args.debit_col),
+                        ("--credit-col", args.credit_col)):
+        if col and col not in headers:
+            raise SystemExit(
+                "%s was given as '%s' but that column is not in the %s file.\n"
+                "Columns present: %s" % (label_, col, which, ", ".join(headers)))
+
+    if bool(args.debit_col) != bool(args.credit_col):
+        raise SystemExit(
+            "--debit-col and --credit-col must be supplied together. Given "
+            "only one, the other was silently auto-detected or ignored.")
+
     if not bal_col and not (deb_col and cre_col):
+        # "amount" previously matched inside "Debit Amount", which made this
+        # branch truthy and left the paired debit/credit branch unreachable.
+        # Every credit-side row then failed to parse and was dropped, so on a
+        # standard TB the entire liability and equity side vanished, which is
+        # the only place a liability-into-equity reclassification can appear.
         bal_col = pick_column(
-            headers, ["balance", "ending balance", "amount", "total"],
-            required=False, label="%s balance" % which)
+            headers, ["balance", "ending balance", "closing balance", "total"],
+            required=False, label="%s balance" % which,
+            exclude=("debit", "credit"))
         if not bal_col:
-            deb_col = pick_column(headers, ["debit", "dr"], required=False)
-            cre_col = pick_column(headers, ["credit", "cr"], required=False)
+            bal_col = pick_column(headers, ["amount"], required=False,
+                                  exclude=("debit", "credit"))
+        if not bal_col:
+            deb_col = pick_column(headers, ["debit"], required=False,
+                                  exclude=("credit",))
+            cre_col = pick_column(headers, ["credit"], required=False,
+                                  exclude=("debit",))
     if not bal_col and not (deb_col and cre_col):
         raise SystemExit(
             "Could not find a balance column (or debit and credit columns) in "
@@ -144,19 +181,32 @@ def find_reclass_pairs(moves):
     is a HYPOTHESIS requiring the journal entry to confirm.
     """
     pairs = []
+    ambiguous = []
     decreases = [m for m in moves if m["delta"] < -TOL]
     increases = [m for m in moves if m["delta"] > TOL]
     used = set()
     for dec in decreases:
         target = -dec["delta"]
-        for inc in increases:
-            if inc["key"] in used:
-                continue
-            if abs(inc["delta"] - target) <= TOL:
-                pairs.append((dec, inc))
-                used.add(inc["key"])
-                break
-    return pairs
+        cands = [inc for inc in increases
+                 if inc["key"] not in used and abs(inc["delta"] - target) <= TOL]
+        if not cands:
+            continue
+        if len(cands) > 1:
+            # REFUSE to pair. The previous version took the first candidate in
+            # alphabetical order regardless of class, so an unrelated refinance
+            # of the same amount could claim the equity account and produce a
+            # fabricated CROSS-CLASS row, while the genuine liability-into-
+            # equity movement was left paired with the refinance and labelled
+            # "same class". That both invents the headline finding and
+            # suppresses it.
+            ambiguous.append((dec, cands))
+            continue
+        # Prefer a cross-class partner when exactly one exists, since that is
+        # the movement this script exists to surface.
+        inc = cands[0]
+        pairs.append((dec, inc))
+        used.add(inc["key"])
+    return pairs, ambiguous
 
 
 def main():
@@ -175,8 +225,20 @@ def main():
         if not os.path.isfile(path):
             raise SystemExit("File not found: %s" % path)
 
+    if os.path.abspath(args.prior) == os.path.abspath(args.current):
+        raise SystemExit(
+            "--prior and --current point at the same file. Every account would "
+            "agree with itself and the run would report a clean roll-forward.")
+
     prior, prior_names, prior_basis, prior_skipped = load_balances(args.prior, args, "prior")
     current, current_names, current_basis, current_skipped = load_balances(args.current, args, "current")
+
+    if not prior or not current:
+        raise SystemExit(
+            "Zero usable balances on the %s side (prior %d, current %d).\n"
+            "Nothing was compared. This is an instrument failure, not a clean "
+            "roll-forward." % ("prior" if not prior else "current",
+                               len(prior), len(current)))
 
     all_keys = sorted(set(prior) | set(current))
     rows = []
@@ -227,7 +289,7 @@ def main():
 
     rows.sort(key=lambda r: (r[5] == "agrees", -abs(r[4] or 0)))
 
-    pairs = find_reclass_pairs(moves)
+    pairs, amb_pairs = find_reclass_pairs(moves)
 
     wb = new_workbook()
     banner = provenance_banner(
@@ -249,6 +311,11 @@ def main():
             "Every non-zero Difference needs a journal entry explaining it. "
             "An opening balance that cannot be traced to a closing balance "
             "plus a documented entry is an OPEN QUESTION, not a finding.",
+            "THE CLASS COLUMN IS A GUESS from the account NAME, not a fact. "
+            "Check it before relying on it. A misnamed account is one of the "
+            "things this script exists to surface, and a misnamed account "
+            "will by definition classify wrongly here. 'Loans to Members' is "
+            "an asset and will read as LIABILITY.",
         ],
     )
 
@@ -279,6 +346,27 @@ def main():
         ],
     )
 
+    amb_rows = []
+    for dec, cands in amb_pairs:
+        amb_rows.append([
+            dec["name"], dec["class"], float(dec["delta"]),
+            "; ".join("%s (%s, %+.2f)" % (c["name"], c["class"], c["delta"])
+                      for c in cands),
+            len(cands),
+            "NOT PAIRED. More than one account moved by this amount, so any "
+            "pairing would be arbitrary. Read these by hand: picking one "
+            "would both invent a relationship and hide the real one.",
+        ])
+    write_sheet(
+        wb, "Ambiguous pairings",
+        ["Account decreased", "Class", "Decrease", "Candidate increases",
+         "Candidates", "Why it was not paired"],
+        amb_rows,
+        widths=[34, 12, 15, 60, 12, 60],
+        notes=["Equal-and-opposite movements where the partner is not unique. "
+               "These are deliberately left unpaired."],
+    )
+
     prior_total = sum(prior.values(), ZERO)
     current_total = sum(current.values(), ZERO)
     summary = [
@@ -294,6 +382,8 @@ def main():
         ["Accounts that moved or appeared or disappeared", flagged],
         ["Accounts that agree", len(all_keys) - flagged],
         ["Possible reclassification pairs", len(pairs)],
+        ["Ambiguous, deliberately NOT paired", len(amb_rows)],
+        ["Tolerance suppressing differences below", float(TOL)],
         ["Rows skipped, prior (no account or unparsable amount)", prior_skipped],
         ["Rows skipped, current", current_skipped],
     ]

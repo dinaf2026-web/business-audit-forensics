@@ -19,6 +19,7 @@ given? It reports UNCHANGED, CHANGED, MISSING, and NEW per item.
 
 import argparse
 import os
+import stat
 import sys
 from datetime import datetime
 
@@ -59,23 +60,70 @@ def guess_description(name):
     return ""
 
 
-def walk_files(root):
+def is_reparse(path):
+    """True for a symlink OR an NTFS junction.
+
+    os.walk(followlinks=False) suppresses directory SYMLINKS only, and since
+    Python 3.8 os.path.islink() returns False for a junction. This machine
+    carries deliberate junctions. Without this check the register hashed an
+    entire junction target as part of the intake set, inflating the file count
+    and byte total, minting evidence IDs for records that were never produced,
+    and in verify mode reporting a false integrity breach when an unrelated
+    process touched the target. A junction pointing at an ancestor recursed
+    until the path length failed.
+    """
+    if os.path.islink(path):
+        return True
+    try:
+        if hasattr(os.path, "isjunction") and os.path.isjunction(path):
+            return True
+    except OSError:
+        return False
+    try:
+        return bool(os.lstat(path).st_file_attributes
+                    & stat.FILE_ATTRIBUTE_REPARSE_POINT)
+    except (AttributeError, OSError):
+        return False
+
+
+def walk_files(root, skipped=None):
     found = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
-        for name in sorted(filenames):
-            if name in SKIP_NAMES or name.endswith(".tmp"):
+        keep = []
+        for d in dirnames:
+            full = os.path.join(dirpath, d)
+            if d in SKIP_DIRS:
+                if skipped is not None:
+                    skipped.append([os.path.relpath(full, root), "directory",
+                                    "Excluded by name (%s)" % d])
                 continue
+            if is_reparse(full):
+                if skipped is not None:
+                    skipped.append([os.path.relpath(full, root), "junction or symlink",
+                                    "NOT followed. Points outside the intake set."])
+                continue
+            keep.append(d)
+        dirnames[:] = keep
+
+        for name in sorted(filenames):
             full = os.path.join(dirpath, name)
-            if os.path.islink(full):
+            if name in SKIP_NAMES or name.endswith(".tmp"):
+                if skipped is not None:
+                    skipped.append([os.path.relpath(full, root), "file",
+                                    "Excluded by name or .tmp suffix"])
+                continue
+            if is_reparse(full):
+                if skipped is not None:
+                    skipped.append([os.path.relpath(full, root), "link",
+                                    "NOT hashed. Link, not a produced record."])
                 continue
             found.append(full)
     return sorted(found)
 
 
-def collect(root, received_from, received_how):
+def collect(root, received_from, received_how, skipped=None):
     rows = []
-    for idx, full in enumerate(walk_files(root), start=1):
+    for idx, full in enumerate(walk_files(root, skipped), start=1):
         rel = os.path.relpath(full, root)
         st = os.stat(full)
         rows.append({
@@ -100,7 +148,26 @@ def build_register(args):
     if not os.path.isdir(root):
         raise SystemExit("Input folder not found: %s" % root)
 
-    items = collect(root, args.received_from, args.received_how)
+    # Refuse to overwrite an existing register. The intake hashes are the only
+    # proof of the state at receipt, and this script's own docstring says the
+    # step cannot be done retroactively. Nothing previously stopped a rebuild
+    # replacing them.
+    out_path = os.path.abspath(args.output)
+    if os.path.exists(out_path) and not args.force:
+        raise SystemExit(
+            "%s already exists.\n"
+            "Refusing to overwrite it: an intake register records the state of "
+            "the evidence at receipt and cannot be rebuilt afterwards. Write "
+            "to a new filename, or pass --force if you are certain."
+            % out_path)
+    if os.path.abspath(root) in out_path:
+        raise SystemExit(
+            "The output would be written inside the intake folder, which would "
+            "make the register part of the evidence it describes. Choose a "
+            "path outside %s." % root)
+
+    skipped = []
+    items = collect(root, args.received_from, args.received_how, skipped)
     if not items:
         raise SystemExit("No files found under %s" % root)
 
@@ -176,10 +243,25 @@ def build_register(args):
         ],
     )
 
+    write_sheet(
+        wb, "Excluded from the register",
+        ["Path", "Kind", "Why it was excluded"],
+        skipped,
+        widths=[60, 22, 60],
+        notes=["Everything the walk chose NOT to hash. Previously these were "
+               "dropped with no row, no count and no note, while the "
+               "Transformation Log sheet instructs that exclusions be recorded "
+               "including ones added only to reduce noise.",
+               "Junctions and symlinks are NOT followed. A junction points "
+               "outside the intake set, and hashing its target would put "
+               "records into the register that were never produced."],
+    )
+
     summary = [
         ["Matter", args.matter or "(unnamed)"],
         ["Intake root", root],
         ["Files logged", len(items)],
+        ["Paths excluded from the register", len(skipped)],
         ["Total bytes", sum(i["size"] for i in items)],
         ["Register built", stamp()],
         ["Examiner", args.examiner],
@@ -218,11 +300,32 @@ def verify(args):
     headers, recorded = read_table(
         reg_path, sheet="Evidence Register",
         header_contains=["Item ID", "Path as received", "SHA-256"])
+    # Rows were previously discarded two ways with no count: a blank path cell
+    # dropped the row, and a duplicate path overwrote the earlier entry. The
+    # guard below only fired on ZERO rows, so a register of 500 with 40 bad
+    # cells verified 460 and reported UNCHANGED 460 | CHANGED 0 | MISSING 0 at
+    # exit 0. Forty pieces of evidence were never verified and nothing said so.
     by_rel = {}
+    blank_rows, dup_rows = [], []
     for row in recorded:
         rel = str(row.get("Path as received") or "").strip()
-        if rel:
-            by_rel[rel] = row
+        if not rel:
+            blank_rows.append(str(row.get("Item ID") or "(no id)"))
+            continue
+        if rel in by_rel:
+            dup_rows.append(rel)
+        by_rel[rel] = row
+
+    if blank_rows or dup_rows:
+        raise SystemExit(
+            "The register could not be read completely and verification was "
+            "NOT attempted.\n"
+            "  %d row(s) have a blank path cell: %s\n"
+            "  %d duplicated path(s): %s\n"
+            "Verifying a subset and reporting the result as clean would hide "
+            "every item that was skipped. Repair the register first."
+            % (len(blank_rows), ", ".join(blank_rows[:10]) or "none",
+               len(dup_rows), ", ".join(sorted(set(dup_rows))[:10]) or "none"))
 
     # Positive control on the instrument itself. If the register parsed to
     # nothing, every current file reads as NEW and the run reports no changes
@@ -303,6 +406,9 @@ def main():
     ap.add_argument("--received-how", default="", help="Email, portal, drive, direct export")
     ap.add_argument("--examiner", default=os.environ.get("USERNAME", "examiner"))
     ap.add_argument("--verify", help="Re-verify against an existing register")
+    ap.add_argument("--force", action="store_true",
+                    help="Allow overwriting an existing register. Intake "
+                         "hashes cannot be rebuilt once replaced.")
     args = ap.parse_args()
 
     if args.verify:

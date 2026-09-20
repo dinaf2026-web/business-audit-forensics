@@ -93,27 +93,53 @@ def sort_key(row):
     return (SEVERITY_ORDER.get(sev, 9), str(row.get("id", "")))
 
 
-def corroborated(row):
+def classify_row(row):
+    """Return one of: 'finding', 'client_only', 'question', 'held'.
+
+    THE BUG THIS REPLACES: only NOT CHECKED was excluded, so a row sourced
+    entirely from the subject's own records was written to the Findings sheet,
+    sorted among VERIFIED items, with nothing distinguishing it. The
+    bookkeeper's spreadsheet is the record under examination; it cannot
+    corroborate a finding about itself.
+    """
     prov = str(row.get("provenance", "")).upper().strip()
     alt = str(row.get("alternative_considered", "")).strip()
     src = str(row.get("source_examined", "")).strip()
     sev = str(row.get("severity", "")).upper().strip()
+
     if sev == "OPEN QUESTION":
-        return True
-    return bool(prov in VALID_PROVENANCE and prov != "NOT CHECKED" and alt and src)
+        return "question"
+    if prov not in VALID_PROVENANCE or prov == "NOT CHECKED" or not alt or not src:
+        return "held"
+    if prov == "FROM CLIENT MATERIAL":
+        return "client_only"
+    return "finding"
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--input")
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--input")
+    mode.add_argument("--template", help="Write a starter JSON to this path and exit")
     ap.add_argument("--output")
-    ap.add_argument("--template", help="Write a starter JSON to this path and exit")
     ap.add_argument("--matter", default="")
+    ap.add_argument("--force", action="store_true",
+                    help="Allow --template to overwrite an existing file.")
     args = ap.parse_args()
 
     if args.template:
         path = os.path.abspath(args.template)
+        # Refuse to overwrite. The docstring prescribes the same filename for
+        # both modes, so re-running the documented --template line replaced a
+        # fully populated findings file with the two-row starter. os.replace
+        # is atomic and unrecoverable.
+        if os.path.exists(path) and not args.force:
+            raise SystemExit(
+                "%s already exists.\n"
+                "Refusing to overwrite it with the starter template. If that "
+                "file holds your findings, this would destroy them. Choose "
+                "another filename, or pass --force if you are certain." % path)
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(TEMPLATE, fh, indent=2)
@@ -121,23 +147,44 @@ def main():
         print("Template written: %s" % path)
         return 0
 
-    if not args.input or not args.output:
-        ap.error("--input and --output are required unless --template is used")
+    if not args.output:
+        ap.error("--output is required with --input")
     if not os.path.isfile(args.input):
         raise SystemExit("File not found: %s" % args.input)
 
-    with open(args.input, "r", encoding="utf-8") as fh:
+    with open(args.input, "r", encoding="utf-8-sig") as fh:
         data = json.load(fh)
     if isinstance(data, dict):
-        data = data.get("findings", [])
+        # A dict missing the key previously yielded [], which IS a list, so the
+        # type guard never fired and the tool wrote an empty findings log at
+        # exit 0. An empty log is indistinguishable from an engagement that
+        # found nothing.
+        if "findings" not in data:
+            raise SystemExit(
+                "The JSON object has no 'findings' key. Keys present: %s\n"
+                "Refusing to write an empty findings log, which would be "
+                "indistinguishable from an engagement that found nothing."
+                % ", ".join(sorted(data.keys())))
+        data = data["findings"]
     if not isinstance(data, list):
         raise SystemExit("Expected a JSON list of findings, or an object with a "
                          "'findings' list.")
+    if not data:
+        raise SystemExit(
+            "%s contains zero findings. Refusing to write an empty findings "
+            "log. If the engagement genuinely found nothing, say so in the "
+            "report rather than shipping an empty log." % args.input)
 
-    good = [r for r in data if corroborated(r)]
-    held = [r for r in data if not corroborated(r)]
+    buckets = {"finding": [], "client_only": [], "question": [], "held": []}
+    for r in data:
+        buckets[classify_row(r)].append(r)
+    for v in buckets.values():
+        v.sort(key=sort_key)
+
+    good = buckets["finding"] + buckets["question"]
     good.sort(key=sort_key)
-    held.sort(key=sort_key)
+    client_only = buckets["client_only"]
+    held = buckets["held"]
 
     def to_rows(records):
         out = []
@@ -150,13 +197,32 @@ def main():
 
     wb = new_workbook()
     write_sheet(
-        wb, "Findings", headers, to_rows(good), widths=widths, flag_col=1,
+        wb, "Findings", headers, to_rows(good), widths=widths,
+        # No flag column. flag_col pointed at Severity, which is truthy on
+        # every row, so the exception fill shaded the entire sheet and carried
+        # no information at all.
         notes=[
             "%s. Built %s." % (args.matter or "Findings log", stamp()),
             "Severity order: CRITICAL, HIGH, MEDIUM, LOW, OPEN QUESTION. "
             "An OPEN QUESTION is stated as a question, never as a defect.",
             "No row here characterizes intent. Report the transaction and the "
             "documentation gap; the conclusion belongs to the reader.",
+        ],
+    )
+
+    write_sheet(
+        wb, "Supported only by client records", headers, to_rows(client_only),
+        widths=widths,
+        notes=[
+            "Every row here is tagged FROM CLIENT MATERIAL. It rests entirely "
+            "on records the subject produced, with nothing independent behind "
+            "it.",
+            "These are kept OFF the Findings sheet on purpose. The records "
+            "under examination cannot corroborate a finding about themselves, "
+            "and a reader cannot tell the difference once the rows are sorted "
+            "together.",
+            "To promote a row, obtain an independent source and re-tag it "
+            "VERIFIED.",
         ],
     )
 
@@ -178,17 +244,31 @@ def main():
     summary = [["Matter", args.matter or "(unnamed)"],
                ["Built", stamp()],
                ["Source", os.path.abspath(args.input)],
-               ["Findings in log", len(good)],
+               ["Corroborated findings", len(buckets["finding"])],
+               ["Open questions", len(buckets["question"])],
+               ["Supported only by client records", len(client_only)],
                ["Held back, not corroborated", len(held)],
                ["", ""]]
-    for sev in ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OPEN QUESTION"]:
+    known = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "OPEN QUESTION"]
+    for sev in known:
         if sev in counts:
             summary.append([sev, counts[sev]])
+    # Unrecognized severities were counted in the total but omitted from the
+    # breakdown, so the breakdown silently failed to sum to the total.
+    for sev in sorted(k for k in counts if k not in known):
+        summary.append([sev + "  (UNRECOGNIZED severity)", counts[sev]])
     write_sheet(wb, "Summary", ["Field", "Value"], summary, widths=[36, 62])
 
     out = save_workbook(wb, args.output)
     print("Findings log written: %s" % out)
-    print("In log: %d | held back as not corroborated: %d" % (len(good), len(held)))
+    print("Corroborated findings: %d | open questions: %d | client-records "
+          "only: %d | held back: %d"
+          % (len(buckets["finding"]), len(buckets["question"]),
+             len(client_only), len(held)))
+    if client_only:
+        print("")
+        print("%d row(s) rest only on records the subject produced and are on "
+              "a separate sheet." % len(client_only))
     if held:
         print("")
         print("%d row(s) did not clear the corroboration gate and are on the "

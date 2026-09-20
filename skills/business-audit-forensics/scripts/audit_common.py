@@ -69,9 +69,54 @@ _DATE_FORMATS = (
     "%Y-%m-%d", "%Y/%m/%d",
     "%m/%d/%Y", "%m-%d-%Y",
     "%d/%m/%Y", "%d-%m-%Y",
-    "%m/%d/%y", "%d/%m/%y",
+    "%m/%d/%y", "%m-%d-%y",
+    "%d/%m/%y", "%d-%m-%y",
     "%b %d, %Y", "%d %b %Y", "%B %d, %Y",
 )
+
+_DMY_SPLIT = re.compile(r"^\s*(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})\s*$")
+
+
+def detect_dayfirst(values, default=False):
+    """Decide the date convention ONCE for a whole column.
+
+    Returns (dayfirst, basis_string).
+
+    THE BUG THIS REPLACES: parse_date tries formats per value, so a single
+    column could be read both ways in one run. '13/05/2026' parsed day-first
+    because month 13 failed, while '03/05/2026' two rows later parsed
+    month-first. Roughly 40% of rows landed in the wrong month with no warning.
+
+    Evidence: any value whose FIRST component exceeds 12 proves day-first; any
+    whose SECOND component exceeds 12 proves month-first. Contradictory
+    evidence is refused rather than guessed.
+    """
+    first_gt12 = second_gt12 = 0
+    for v in values:
+        if v is None:
+            continue
+        m = _DMY_SPLIT.match(str(v))
+        if not m:
+            continue
+        a, b = int(m.group(1)), int(m.group(2))
+        if a > 12:
+            first_gt12 += 1
+        if b > 12:
+            second_gt12 += 1
+
+    if first_gt12 and second_gt12:
+        raise SystemExit(
+            "This date column contains BOTH values whose first component "
+            "exceeds 12 (%d rows, proving day-first) and values whose second "
+            "component exceeds 12 (%d rows, proving month-first). The column "
+            "is internally inconsistent and cannot be parsed safely. Fix the "
+            "export or split the file." % (first_gt12, second_gt12))
+    if first_gt12:
+        return True, "day-first, proven by %d row(s) with a first component over 12" % first_gt12
+    if second_gt12:
+        return False, "month-first, proven by %d row(s) with a second component over 12" % second_gt12
+    return default, ("no row proves the convention, so the %s default was used"
+                     % ("day-first" if default else "month-first"))
 
 
 def parse_date(value, dayfirst=False):
@@ -105,11 +150,30 @@ def parse_date(value, dayfirst=False):
     return None
 
 
-_AMOUNT_CLEAN = re.compile(r"[^0-9.\-()]")
+_AMOUNT_STRIP = re.compile(r"[^0-9.,\-()]")
+_TRAILING_MINUS = re.compile(r"^([0-9.,]+)-$")
 
 
 def parse_amount(value):
-    """Return a Decimal, or None. Handles $, commas, and (123.45) negatives."""
+    """Return a Decimal, or None.
+
+    Handles currency symbols, thousands separators, (123.45) negatives and
+    trailing-minus. Detects the decimal convention rather than assuming US.
+
+    THE BUG THIS REPLACES: the previous version deleted every comma and then
+    parsed what remained as US format, so '1.234,56' became 1.23456 and
+    '1 234,56' became 123456. It never failed, so a European or
+    comma-decimal export was silently mis-scaled by 10x to 1000x and every
+    downstream total inherited it with no signal anywhere.
+
+    Convention detection:
+      - both separators present -> the LAST one is the decimal mark
+      - only ',' present, followed by exactly 3 digits at end -> thousands
+      - only ',' present, followed by 1 or 2 digits at end    -> decimal
+      - only ',' present, appearing more than once            -> thousands
+    An input whose separators are internally inconsistent returns None rather
+    than a guess.
+    """
     if value is None or value == "":
         return None
     if isinstance(value, (int, float, Decimal)):
@@ -117,12 +181,48 @@ def parse_amount(value):
             return Decimal(str(value))
         except InvalidOperation:
             return None
+
     text = str(value).strip()
     if not text:
         return None
-    negative = text.startswith("(") and text.endswith(")")
-    text = _AMOUNT_CLEAN.sub("", text).replace("(", "").replace(")", "")
-    if text in ("", "-", "."):
+
+    negative = (text.startswith("(") and text.endswith(")")) or text.endswith("-")
+    text = _AMOUNT_STRIP.sub("", text).replace("(", "").replace(")", "")
+    m = _TRAILING_MINUS.match(text)
+    if m:
+        text = m.group(1)
+    if text.startswith("-"):
+        negative = True
+        text = text[1:]
+    text = text.replace("-", "")
+    if text in ("", ".", ","):
+        return None
+
+    last_dot = text.rfind(".")
+    last_comma = text.rfind(",")
+
+    if last_dot >= 0 and last_comma >= 0:
+        if last_comma > last_dot:
+            # 1.234,56  -> comma is the decimal mark
+            if text.count(",") > 1:
+                return None
+            text = text.replace(".", "").replace(",", ".")
+        else:
+            # 1,234.56  -> dot is the decimal mark
+            if text.count(".") > 1:
+                return None
+            text = text.replace(",", "")
+    elif last_comma >= 0:
+        tail = len(text) - last_comma - 1
+        if text.count(",") > 1 or tail == 3:
+            text = text.replace(",", "")          # thousands
+        elif tail in (1, 2):
+            text = text.replace(",", ".")         # decimal
+        else:
+            text = text.replace(",", "")
+    # dot-only, or neither: already usable
+
+    if text.count(".") > 1:
         return None
     try:
         amount = Decimal(text)
@@ -164,6 +264,24 @@ def read_table(path, sheet=None, header_contains=None):
             reader = csv.DictReader(fh, delimiter=delim)
             headers = list(reader.fieldnames or [])
             rows = [dict(r) for r in reader]
+        # header_contains was previously enforced for XLSX only, so a caller
+        # asking for validation on a CSV got none and no error. That left the
+        # single guard against reading a note line as a header with a hole in
+        # half its input space.
+        if header_contains:
+            present = set(headers)
+            missing = [w for w in header_contains if w not in present]
+            if missing:
+                raise SystemExit(
+                    "Expected header column(s) %s not found in %s. Headers "
+                    "read: %s. Refusing to continue: reading the wrong row as "
+                    "a header would compare an empty set and report it as "
+                    "clean." % (", ".join(missing), path, ", ".join(headers)))
+            if not rows:
+                raise SystemExit(
+                    "%s has the expected headers but zero data rows. Refusing "
+                    "to continue: a comparison against nothing is not a clean "
+                    "result." % path)
         return headers, rows
 
     if ext in (".xlsx", ".xlsm"):
@@ -202,22 +320,65 @@ def read_table(path, sheet=None, header_contains=None):
     raise ValueError("Unsupported table format: %s" % ext)
 
 
-def pick_column(headers, candidates, required=True, label=""):
-    """Find a column by case-insensitive partial match against candidates."""
+def pick_column(headers, candidates, required=True, label="", exclude=()):
+    """Find a column by exact then word-boundary match against candidates.
+
+    exclude: reject any header containing one of these words, even on an
+    otherwise good match. Used to stop a generic candidate such as "amount"
+    binding to "Debit Amount" when a paired debit/credit branch exists.
+
+    THE BUG THIS REPLACES: the fallback was a bare substring test in header
+    order, so ["debit","dr"] bound to "Doc Address" and ["num","number"] bound
+    to "Account Number". Combined with a permissive amount parser, a text
+    column then produced numbers instead of failing, and the run reported
+    almost nothing unparsable.
+    """
     lowered = {h.lower().strip(): h for h in headers if h}
+    blocked = tuple(e.lower() for e in exclude)
+
+    def ok(header_lower):
+        return not any(b in header_lower for b in blocked)
+
     for cand in candidates:
-        if cand.lower() in lowered:
-            return lowered[cand.lower()]
+        c = cand.lower()
+        if c in lowered and ok(c):
+            return lowered[c]
+
     for cand in candidates:
+        c = cand.lower()
+        if len(c) < 3:
+            continue          # 2-letter candidates matched far too much
+        pat = re.compile(r"\b" + re.escape(c) + r"\b")
         for low, original in lowered.items():
-            if cand.lower() in low:
+            if pat.search(low) and ok(low):
                 return original
+
     if required:
         raise SystemExit(
             "Could not find a %s column. Looked for %s. Columns present: %s"
             % (label or "required", ", ".join(candidates), ", ".join(headers))
         )
     return None
+
+
+def validate_numeric_column(rows, col, label="", min_ratio=0.7):
+    """Confirm a column chosen as an amount actually contains numbers.
+
+    Guards against a text column being bound by name matching and then parsed
+    into numbers scraped out of payment narratives.
+    """
+    sample = [r.get(col) for r in rows[:200] if r.get(col) not in (None, "")]
+    if not sample:
+        return
+    good = sum(1 for v in sample if parse_amount(v) is not None)
+    ratio = good / float(len(sample))
+    if ratio < min_ratio:
+        raise SystemExit(
+            "Column '%s' was chosen as the %s column but only %d of %d sampled "
+            "values parse as numbers (%.0f%%). That is almost certainly the "
+            "wrong column. Name it explicitly rather than relying on "
+            "detection." % (col, label or "amount", good, len(sample),
+                            ratio * 100))
 
 
 # ------------------------------------------------------------ xlsx output

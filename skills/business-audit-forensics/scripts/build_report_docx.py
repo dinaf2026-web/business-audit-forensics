@@ -17,6 +17,7 @@ destination locked by a word processor does not destroy the build.
 import argparse
 import json
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -175,7 +176,13 @@ def build(data, out_path):
         para(doc, "Not covered by this work:", bold=True, size=13)
         bullets(doc, scope["not_covered"])
 
-    para(doc, data.get("limitations") or DEFAULT_LIMITATIONS, italic=True)
+    # The standing paragraph is ALWAYS emitted. Previously any truthy value in
+    # "limitations" replaced it, including a single space, while the docstring
+    # promised it could be edited but not omitted. Custom text is appended.
+    para(doc, DEFAULT_LIMITATIONS, italic=True)
+    custom = (data.get("limitations") or "").strip()
+    if custom and custom != DEFAULT_LIMITATIONS:
+        para(doc, custom, italic=True)
 
     if data.get("background"):
         heading(doc, "3. Background")
@@ -233,33 +240,85 @@ def build(data, out_path):
     parent = os.path.dirname(out_path)
     if parent and not os.path.isdir(parent):
         os.makedirs(parent, exist_ok=True)
+    # Copy to a sibling .tmp then os.replace, which is atomic. A direct
+    # copyfile onto the destination truncates it first, so a dropped network
+    # mount or a full volume mid-copy destroyed the previously delivered
+    # report and left a corrupt .docx in its place. Only PermissionError was
+    # being caught, so an OSError surfaced as a traceback after the damage.
+    tmp_dest = out_path + ".tmp"
     try:
-        shutil.copyfile(staged, out_path)
-        os.remove(staged)
-        return out_path, None
+        shutil.copyfile(staged, tmp_dest)
+        os.replace(tmp_dest, out_path)
     except PermissionError:
+        for p in (tmp_dest,):
+            try:
+                os.remove(p)
+            except OSError:
+                pass
         return None, staged
+    except OSError as exc:
+        try:
+            os.remove(tmp_dest)
+        except OSError:
+            pass
+        raise SystemExit(
+            "Could not write %s: %s\nThe previous file at that path is "
+            "UNCHANGED. The build is staged at %s." % (out_path, exc, staged))
+    try:
+        os.remove(staged)
+    except OSError:
+        pass
+    return out_path, None
 
 
 def check_style(data):
-    """Warn on the two house-style rules that are easiest to break."""
+    """Warn on the house-style rules that are easiest to break.
+
+    THE BUG THIS FIXES: json.dumps defaults to ensure_ascii=True, which
+    encodes U+2014 as the six characters \\u2014, so the em-dash test compared
+    against a string that could never contain one. The check had never fired
+    since it was written and its silence was being read as compliance.
+    """
     warnings = []
-    blob = json.dumps(data)
+    blob = json.dumps(data, ensure_ascii=False)
     if "—" in blob:
         warnings.append("Em dash found. Use commas, periods, or restructure.")
+    if "–" in blob:
+        warnings.append("En dash found. Use a plain hyphen or restructure.")
+    # Month day, year needs a closing comma after the year, including
+    # attributively: "the July 7, 2025, transfer".
+    for m in re.finditer(
+            r"\b(January|February|March|April|May|June|July|August|September|"
+            r"October|November|December)\s+\d{1,2},\s+\d{4}(?=\s+[a-z])", blob):
+        warnings.append(
+            "Date needs a closing comma after the year: '%s'" % m.group(0))
     return warnings
 
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--input")
+    mode = ap.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--input")
+    mode.add_argument("--template")
     ap.add_argument("--output")
-    ap.add_argument("--template")
+    ap.add_argument("--force", action="store_true",
+                    help="Allow --template to overwrite an existing file.")
     args = ap.parse_args()
 
     if args.template:
         path = os.path.abspath(args.template)
+        # REFUSE to overwrite. The docstring prescribes the same filename for
+        # both modes, so re-running the documented --template line from shell
+        # history replaced a fully populated report file with the two-section
+        # starter. os.replace is atomic and unrecoverable, and there was no
+        # prompt, no backup and no flag to forget.
+        if os.path.exists(path) and not args.force:
+            raise SystemExit(
+                "%s already exists.\n"
+                "Refusing to overwrite it with the starter template. If that "
+                "file holds your work, this would destroy it. Choose another "
+                "filename, or pass --force if you are certain." % path)
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(TEMPLATE, fh, indent=2)
@@ -267,12 +326,15 @@ def main():
         print("Template written: %s" % path)
         return 0
 
-    if not args.input or not args.output:
-        ap.error("--input and --output are required unless --template is used")
+    if not args.output:
+        ap.error("--output is required with --input")
     if not os.path.isfile(args.input):
         raise SystemExit("File not found: %s" % args.input)
 
-    with open(args.input, "r", encoding="utf-8") as fh:
+    # utf-8-sig so a file saved from Notepad does not fail with
+    # "Expecting value: line 1 column 1", which reads as malformed JSON
+    # rather than as a byte-order mark.
+    with open(args.input, "r", encoding="utf-8-sig") as fh:
         data = json.load(fh)
 
     for w in check_style(data):

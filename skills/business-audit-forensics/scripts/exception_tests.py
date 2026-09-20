@@ -35,6 +35,9 @@ from audit_common import (  # noqa: E402
 
 ZERO = Decimal("0")
 CONTROL_TAG = "ZZ-CONTROL-ROW-DO-NOT-REPORT"
+# Far above any plausible cheque number, invoice number or ACH trace, so a
+# control can never sit inside a real numbering chain.
+CTRL_SEQ_BASE = 99000001
 
 
 def month_end(d):
@@ -124,7 +127,12 @@ def t_new_payee(txns, cfg):
     for t in sorted(txns, key=lambda x: x["date"]):
         if t["norm"] and t["norm"] not in first_seen:
             first_seen[t["norm"]] = t
-    limit = cfg["round_threshold"]
+    # Previously this reused cfg["round_threshold"], so raising --round-
+    # threshold to cut round-amount noise silently re-based this test too.
+    # The Summary labelled the knob only as "Round threshold", so the
+    # workpaper claimed first-payment screening was performed at a threshold
+    # the operator never chose and could not see.
+    limit = cfg["new_payee_threshold"]
     hits = []
     for norm, t in first_seen.items():
         if abs(t["amount"]) >= limit:
@@ -207,10 +215,20 @@ def build_controls(cfg):
     controls.append(mk(-6, date(2000, 1, 31), "77.11", CONTROL_TAG + " PERIODEND"))
     controls.append(mk(-7, d, str((limit * Decimal("0.95")).quantize(Decimal("0.01"))),
                        CONTROL_TAG + " THRESHOLD"))
-    controls.append(mk(-8, d, str(cfg["round_threshold"] + Decimal("13")),
+    controls.append(mk(-8, d, str(cfg["new_payee_threshold"] + Decimal("13")),
                        CONTROL_TAG + " NEWPAYEE"))
-    controls.append(mk(-9, d, "10.00", CONTROL_TAG + " SEQA", seq=900001))
-    controls.append(mk(-10, d, "10.00", CONTROL_TAG + " SEQB", seq=900005))
+    # Sequence controls are placed FAR above any plausible real reference so
+    # they cannot interleave with real data. Previously they were 900001 and
+    # 900005, which are ordinary six-digit ACH traces and cheque numbers: a
+    # real row at 900003 was reported with "Gap in sequence: 1 missing between
+    # 900001 and 900003", a fabricated exception measured against a synthetic
+    # row, while the control still reported PASS.
+    # THREE numbered rows, because t_sequence_gaps requires at least three to
+    # run at all. With only two the control population was below the test's
+    # own minimum and the control reported FAIL on working code.
+    controls.append(mk(-9, d, "10.00", CONTROL_TAG + " SEQA", seq=CTRL_SEQ_BASE))
+    controls.append(mk(-11, d, "10.00", CONTROL_TAG + " SEQC", seq=CTRL_SEQ_BASE + 1))
+    controls.append(mk(-10, d, "10.00", CONTROL_TAG + " SEQB", seq=CTRL_SEQ_BASE + 4))
     return controls
 
 
@@ -293,6 +311,10 @@ def main():
     ap.add_argument("--input", required=True)
     ap.add_argument("--output", required=True)
     ap.add_argument("--round-threshold", type=str, default="1000")
+    ap.add_argument("--new-payee-threshold", type=str, default="",
+                    help="Materiality floor for the first-payment test. "
+                         "Defaults to --round-threshold, and is recorded "
+                         "separately in the output.")
     ap.add_argument("--approval-limit", type=str, default="")
     ap.add_argument("--near-days", type=int, default=7)
     ap.add_argument("--dayfirst", action="store_true")
@@ -301,11 +323,18 @@ def main():
     if not os.path.isfile(args.input):
         raise SystemExit("File not found: %s" % args.input)
 
-    cfg = {
-        "round_threshold": Decimal(args.round_threshold),
-        "approval_limit": Decimal(args.approval_limit) if args.approval_limit else None,
-        "near_days": args.near_days,
-    }
+    try:
+        cfg = {
+            "round_threshold": Decimal(args.round_threshold),
+            "new_payee_threshold": Decimal(args.new_payee_threshold
+                                           or args.round_threshold),
+            "approval_limit": Decimal(args.approval_limit) if args.approval_limit else None,
+            "near_days": args.near_days,
+        }
+    except Exception:
+        raise SystemExit("--round-threshold, --new-payee-threshold and "
+                         "--approval-limit must be plain numbers with no "
+                         "thousands separators.")
 
     headers, rows = read_table(args.input)
     date_col = pick_column(headers, ["date", "transaction date", "posting date"],
@@ -341,25 +370,56 @@ def main():
             "seq": seq, "control": False,
         })
 
+    # THE BUG THIS GUARDS: the ten control rows are self-sufficient. They
+    # duplicate each other, recur against each other, and carry their own
+    # sequence gap. With an empty transaction population every control was
+    # still detected, so all eight tests printed "control PASS | 0
+    # exception(s)" and the sheets asserted "a zero from this test is
+    # meaningful". The run examined nothing and certified eight meaningful
+    # zeros, at exit code 0.
+    if not txns:
+        raise SystemExit(
+            "Zero usable transaction rows were read from %s (%d row(s) were "
+            "unparsable).\n"
+            "Nothing was examined. This is an instrument failure, not a clean "
+            "result: with no population every test trivially finds nothing "
+            "while its control still passes on the synthetic rows."
+            % (args.input, len(not_screened)))
+
     controls = build_controls(cfg)
     population = txns + controls
 
     wb = new_workbook()
+    # The resolved column names belong in the banner. Without them nobody can
+    # establish which field a sheet was computed over, which for an
+    # evidence-grade deliverable is a provenance failure, not a convenience
+    # gap. The sibling scripts already record their basis.
     banner = provenance_banner(
         "exception_tests.py",
-        "round_threshold=%s; approval_limit=%s; near_days=%d; rows=%d" % (
-            cfg["round_threshold"], cfg["approval_limit"], cfg["near_days"],
-            len(txns)),
+        "round_threshold=%s; new_payee_threshold=%s; approval_limit=%s; "
+        "near_days=%d; rows=%d; columns used: date='%s', amount='%s', "
+        "description='%s', account='%s', reference='%s'" % (
+            cfg["round_threshold"], cfg["new_payee_threshold"],
+            cfg["approval_limit"], cfg["near_days"], len(txns),
+            date_col, amt_col, desc_col or "(none)", acct_col or "(none)",
+            seq_col or "(none)"),
     )
 
     control_rows = []
     summary_counts = []
 
     for name, fn, caution in TESTS:
-        hits = fn(population, cfg)
+        # Two separate runs. The control population never touches the real
+        # one, so a synthetic row cannot generate an exception against real
+        # data (control sequence values once sat inside the real numbering
+        # chain and produced fabricated gap and duplicate-reference findings
+        # while still reporting PASS), and a real row cannot accidentally
+        # satisfy a control.
+        hits = fn(txns, cfg)
+        ctrl_hits = fn(controls, cfg)
 
         expected = CONTROL_EXPECT.get(name)
-        detected_rows = {t["row"] for t, _ in hits}
+        detected_rows = {t["row"] for t, _ in ctrl_hits}
         if name == "Sequence gaps" and not any(t["seq"] is not None for t in txns):
             control_status = "NOT RUN"
             control_note = ("No numeric reference column in the input, so this "
@@ -380,6 +440,12 @@ def main():
         control_rows.append([name, control_status, control_note])
 
         real_hits = [(t, why) for t, why in hits if not t["control"]]
+        leaked = [t for t, _ in hits if t["control"]]
+        if leaked:
+            raise SystemExit(
+                "A control row reached the '%s' results. Controls must never "
+                "appear in reported output. Rows: %s"
+                % (name, ", ".join(str(t["row"]) for t in leaked)))
         sheet_rows = [[
             t["row"], t["date"].isoformat(), float(t["amount"]), t["desc"],
             t["account"], t["seq"], why, "", "", "",
@@ -459,6 +525,7 @@ def main():
                ["Rows screened", len(txns)],
                ["Rows NOT screened", len(not_screened)],
                ["Round threshold", float(cfg["round_threshold"])],
+               ["New-payee threshold", float(cfg["new_payee_threshold"])],
                ["Approval limit", float(cfg["approval_limit"]) if cfg["approval_limit"] else "not supplied"],
                ["Near-duplicate window (days)", cfg["near_days"]],
                ["", ""],
@@ -487,6 +554,11 @@ def main():
     print("")
     print("Every row above is a HYPOTHESIS. Nothing is a finding until it has "
           "been corroborated against a source document.")
+
+    # A failed control is a failed run. Exiting 0 let a caller or a scheduler
+    # treat a broken detector as a clean population.
+    if failed:
+        return 2
     return 0
 
 
