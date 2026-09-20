@@ -116,7 +116,7 @@ Three tags. The tag does not need to be literal bracket text, but it must be
 
 | Tag | Means | How it is written |
 |---|---|---|
-| **VERIFIED** | Checked this engagement against a named source. | State as fact, name the source and date. "The December closing balance of $12,345.67 agrees to the bank statement dated 12/31." |
+| **VERIFIED** | Checked this engagement against a named source. | State as fact, name the source and date. "The December closing balance of $12,345.67 agrees to the bank statement dated 31 December." |
 | **FROM CLIENT MATERIAL** | Comes from something the client handed you. | Attribute it. "The workbook records $X. This has not been independently confirmed." |
 | **NOT CHECKED** | Not examined, or the source could not be obtained. | Say so plainly. "The January card statement was not produced, so the year-end card balance is unconfirmed." |
 
