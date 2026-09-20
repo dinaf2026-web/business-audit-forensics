@@ -69,6 +69,7 @@ reporting, and an adversarial self-review.
 | `evidence-and-custody.md` | Chain of custody, transformation logs, working rules, admissibility in plain terms |
 | `internal-audit-program.md` | Vouching in both directions, control design versus operation, segregation of duties, asset verification, authorization testing, compliance, value for money |
 | `reconciliation-and-rollforward.md` | Two-directional tie-out, the prior-year roll forward, intercompany reconciliation, cutoff |
+| `liabilities-and-debt.md` | Hidden and unrecorded debt: the search for unrecorded liabilities, obligations that do not look like debt (merchant cash advances, factoring, unearned revenue), personal guarantees, trust-fund payroll taxes, covenant testing, public records, and collectability of what is owed to the business |
 | `exception-tests-and-schemes.md` | The analytics battery, what each scheme leaves behind in the books, the four analysis modes, competing interpretations |
 | `damages-and-expert-report.md` | Damages models, the expert standard, report structure, the language discipline |
 | `tooling.md` | The software landscape, honestly tiered, with a standing warning that product names go stale |
@@ -86,6 +87,7 @@ runs on any machine without a licensed tool.
 | `reconcile.py` | Matches a ledger against statement lines in **both** directions. |
 | `rollforward_diff.py` | Diffs prior-period closing balances against current-period opening balances and pairs equal-and-opposite movements as possible reclassifications. |
 | `exception_tests.py` | Runs the analytics battery. Every test carries a positive control. |
+| `search_unrecorded_liabilities.py` | Finds post-period payments with no liability recorded at period end, and detects the recurring fixed-debit signature of a merchant cash advance or factoring facility. |
 | `build_findings_xlsx.py` | Severity-ranked findings log. |
 | `build_report_docx.py` | Report DOCX at a 12pt floor with the limitations paragraph inserted automatically. |
 

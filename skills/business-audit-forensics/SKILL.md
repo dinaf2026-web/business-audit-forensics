@@ -396,6 +396,27 @@ When a period reconciles fully, **record that it did, with the ending balance
 and the statements used.** A clean reconciliation is a finding. It is also what
 stops a future session from redoing three days of work.
 
+### 2b-ii. Search for what is NOT there
+
+Reconciliation tests what is recorded. **An omitted liability leaves no entry
+to test**, so every procedure that starts from the ledger is blind to it. This
+is the completeness assertion, and it is tested by working from the outside in.
+
+The highest-yield procedure: take disbursements made **after** period end and
+ask, of each one, what period the underlying obligation belongs to. A January
+payment for December services is a December liability, and if it is not on the
+December balance sheet it is unrecorded. `scripts/search_unrecorded_liabilities.py`
+does the comparison.
+
+The same script detects the recurring fixed-debit signature of a merchant cash
+advance or factoring facility, which is debt that frequently appears nowhere on
+the balance sheet because it is documented as a sale of receivables rather than
+a loan.
+
+Full treatment, including personal guarantees, trust-fund payroll taxes,
+covenant testing, and the public records to search, is in
+`references/liabilities-and-debt.md`.
+
 ### 2c. Roll forward from the prior year
 
 **The most valuable single move in this skill, and the one almost nobody runs.**
@@ -636,6 +657,7 @@ re-derivation upgrades a finding. The point is to re-derive, not to retract.
 | Internal posture: vouching, control testing, asset verification, authorization, compliance, value for money | `references/internal-audit-program.md` |
 | The population is too large to examine in full, or you need to say precisely what a test proves, or rank a control failure in professional terms | `references/sampling-and-assertions.md` |
 | Running the tie-out or the prior-year roll forward | `references/reconciliation-and-rollforward.md` |
+| The question involves what the business **owes**: hidden debt, unrecorded liabilities, guarantees, covenants, or collectability of what is owed to it | `references/liabilities-and-debt.md` |
 | Exception testing, the four analysis modes, and what each scheme leaves behind | `references/exception-tests-and-schemes.md` |
 | Quantifying a loss, or writing anything that may reach a court | `references/damages-and-expert-report.md` |
 | Choosing or evaluating software, or asked what tools this work uses | `references/tooling.md` |
@@ -658,6 +680,7 @@ overwrites an input.
 | `reconcile.py` | Matches a ledger against statement lines in both directions. Separates matched, ledger-only, statement-only, and ambiguous. |
 | `rollforward_diff.py` | Diffs prior-period closing balances against current-period opening balances and pairs equal-and-opposite moves as possible reclassifications. |
 | `exception_tests.py` | Runs the analytics battery. **Every test carries a positive control**, and a test whose control fails is reported BROKEN with its population marked NOT SCREENED. |
+| `search_unrecorded_liabilities.py` | Works from outside the ledger inward. Finds post-period payments with no liability recorded at period end, and detects the recurring fixed-debit signature of a merchant cash advance or factoring facility. Keeps one-off candidates and facility remittances in separate totals. |
 | `build_findings_xlsx.py` | Severity-ranked findings log. **Holds back any row missing a provenance tag, a named source, or the alternative explanation**, onto a separate sheet. |
 | `build_report_docx.py` | Report DOCX at the 12pt floor with the limitations paragraph inserted automatically. Stages the build so a locked destination cannot destroy it. |
 
