@@ -397,6 +397,24 @@ thresholds, and what each test is actually evidence of are in
 `references/exception-tests-and-schemes.md`. `scripts/exception_tests.py` runs
 the standard set.
 
+**Decide first whether you are examining the whole population or a sample, and
+say which.** This skill defaults to the whole population, and that default is
+right more often than the profession's habits suggest: a full year of bank
+activity reconciles by script in minutes and produces a fact rather than an
+inference. Sample only when the population genuinely cannot be handled, or when
+the question is whether a control *operated*, which is a question about a rate.
+
+**In a forensic posture, do not sample.** A sample cannot prove absence, and a
+concealed transaction is precisely the item least likely to fall into a random
+draw. If you did sample and a single exception appears, stop sampling and
+examine the whole population: you are no longer estimating a rate, you are
+investigating an item.
+
+Selection methods, what drives sample size, how to read an exception found in a
+sample, the assertions framework for saying what a test actually proves, and
+the professional deficiency ladder are in
+`references/sampling-and-assertions.md`.
+
 Three rules govern this phase and they matter more than the test list.
 
 **Every test needs a positive control before its output means anything.** A
@@ -580,6 +598,7 @@ re-derivation upgrades a finding. The point is to re-derive, not to retract.
 | Starting any engagement: intake, document request list, risk-based planning, limitations language, when to hand off | `references/engagement-scoping.md` |
 | Any forensic posture, or any file that may be produced in a dispute | `references/evidence-and-custody.md` |
 | Internal posture: vouching, control testing, asset verification, authorization, compliance, value for money | `references/internal-audit-program.md` |
+| The population is too large to examine in full, or you need to say precisely what a test proves, or rank a control failure in professional terms | `references/sampling-and-assertions.md` |
 | Running the tie-out or the prior-year roll forward | `references/reconciliation-and-rollforward.md` |
 | Exception testing, the four analysis modes, and what each scheme leaves behind | `references/exception-tests-and-schemes.md` |
 | Quantifying a loss, or writing anything that may reach a court | `references/damages-and-expert-report.md` |
