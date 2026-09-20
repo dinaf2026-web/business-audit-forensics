@@ -112,7 +112,19 @@ the point:
 
 **Claude Code / Cowork, via the marketplace:**
 
-Settings → Add marketplace → paste this repository URL → Sync → Install.
+This plugin is listed in the `dina-skills` marketplace. Add that catalog once
+and this plugin, plus anything added to it later, becomes installable:
+
+```
+/plugin marketplace add dinaf2026-web/dina-skills
+/plugin install business-audit-forensics@dina-skills
+```
+
+Or in the UI: Settings → Add marketplace → paste
+`https://github.com/dinaf2026-web/dina-skills` → Sync → Install.
+
+This repository is the plugin itself and is not a marketplace, so adding this
+URL as a marketplace will not work.
 
 **Manually:** copy `skills/business-audit-forensics/` into `~/.claude/skills/`.
 
