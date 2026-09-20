@@ -63,7 +63,9 @@ reporting, and an adversarial self-review.
 
 | File | Covers |
 |---|---|
+| `regulatory-regimes.md` | Which obligations actually attach. Public company requirements (SOX 302, 404(a) vs 404(b), filer status, ICFR, record destruction, illegal-act escalation), federal awards, ERISA plans, regulated institutions, nonprofits, and the contractual triggers that hide in loan and operating agreements |
 | `engagement-scoping.md` | Intake, document request list, risk-based planning, limitations language, when to hand off to a credentialed professional |
+| `sampling-and-assertions.md` | When not to sample, selection methods, what drives sample size, the assertions framework, and the deficiency / significant deficiency / material weakness ladder |
 | `evidence-and-custody.md` | Chain of custody, transformation logs, working rules, admissibility in plain terms |
 | `internal-audit-program.md` | Vouching in both directions, control design versus operation, segregation of duties, asset verification, authorization testing, compliance, value for money |
 | `reconciliation-and-rollforward.md` | Two-directional tie-out, the prior-year roll forward, intercompany reconciliation, cutoff |
@@ -168,8 +170,15 @@ A widely repeated claim worth not believing: that every legal entity is
 required to have an external audit. That is not true for US private companies
 as a general matter. An audit obligation comes from a specific trigger, such as
 SEC registration, a lender covenant, a franchise agreement, ERISA plan size, or
-a state nonprofit threshold. Check the trigger before telling an owner they are
-non-compliant.
+a state nonprofit threshold.
+
+**So the skill determines the regime before it plans the work**, and applies
+what actually attaches. It covers the public-company requirements in full for
+when the subject is a registrant, and it refuses to impose them when the
+subject is a private LLC. Both failures are common: inventing an obligation
+that does not exist costs the owner money, and missing one that does is worse.
+The obligation most often missed is contractual rather than statutory, and it
+sits in the loan agreement or the operating agreement.
 
 The skill names the handoff points explicitly, and the handoff is not a
 failure. Work done properly here becomes what the credentialed professional

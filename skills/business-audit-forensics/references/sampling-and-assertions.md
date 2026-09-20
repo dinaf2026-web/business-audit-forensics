@@ -196,15 +196,26 @@ compensating control exists.
 Much of the best-documented material on control testing comes from the Sarbanes
 Oxley regime, and the vocabulary above is largely its vocabulary.
 
-**SOX Section 404 is a public-company obligation.** It does not apply to a
+**Where the entity IS a public company, apply it properly.** Section 404(a),
+management's assessment of internal control over financial reporting, applies
+to **every** filer with no small-company exemption. Section 404(b), the auditor
+attestation, is the part carrying exemptions for non-accelerated filers,
+emerging growth companies, and smaller issuers. Confusing (a) with (b) is the
+most common error in this area. The full requirements, the filer definitions,
+the disclosure consequences of a material weakness, and the forensic-specific
+provisions on record destruction and illegal-act escalation are in
+`regulatory-regimes.md`.
+
+**Where it is not, SOX imposes nothing.** Section 404 does not apply to a
 private LLC, a family business, or a partnership as a matter of law. Do not
-tell an owner they are required to do any of this.
+tell an owner they are required to do any of this, and never use the obligation
+as a reason someone should hire anyone.
 
-**The methodology still transfers**, and that is why it is here: scope to what
-matters, identify the risk, identify the control, test design and operation,
-classify what you find, and document it so someone else can re-perform it. That
-sequence is good practice at any size.
+**The methodology transfers either way**, which is why it is here: scope to
+what matters, identify the risk, identify the control, test design and
+operation, classify what you find, and document it so someone else can
+re-perform it. That sequence is good practice at any size. It is method, not
+obligation, and the report should say which.
 
-Use the vocabulary when the audience is professional. Use plain words when the
-audience is the owner. Never use the obligation as a reason someone should hire
-anyone.
+Use the professional vocabulary when the audience is professional. Use plain
+words when the audience is the owner.

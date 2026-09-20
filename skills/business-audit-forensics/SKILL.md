@@ -276,6 +276,41 @@ verbatim later, so getting them right now saves a rewrite.
 5. **Conflicts.** In a dispute, ask who the parties are before reading their
    records.
 
+### Determine the regulatory regime before you plan anything
+
+**This comes before scoping, because it changes the scope, the standards, the
+deliverable, and what has to happen if you find something.**
+
+Ask whether the entity is an SEC registrant or preparing to become one,
+receives federal awards, sponsors an employee benefit plan, is a regulated
+financial institution, is a nonprofit above a state threshold, or is bound by a
+contract that imposes a requirement.
+
+Two failures are possible and both are common:
+
+- **Imposing an obligation that does not exist.** Telling a private LLC it must
+  comply with Sarbanes-Oxley, or must obtain an external audit, is wrong and it
+  costs the owner real money. Most US private companies have **no statutory
+  audit obligation at all**.
+- **Missing one that does.** The obligation most often missed is contractual,
+  not statutory, and it sits in the loan agreement or the operating agreement.
+  A covenant requiring audited statements, a fidelity policy with a notice
+  deadline after a discovered loss, a buy-sell requiring valuation on a
+  triggering event. **Read those two documents.**
+
+Where a regime does attach, apply it properly rather than approximately. Where
+it does not, use the method in this skill and say plainly that it is method and
+not obligation.
+
+**In a public company the engagement is not private.** Fraud involving anyone
+with a role in internal control is a certification and disclosure matter
+regardless of amount, record destruction carries criminal exposure, and there
+are defined escalation paths once a possible illegal act is identified. Say
+this at the outset, not after a discovery.
+
+Load `references/regulatory-regimes.md` for the determination gate and what
+each regime actually requires.
+
 Load `references/engagement-scoping.md` for the intake checklist, the document
 request list, the risk-based planning method, and the standing limitations
 paragraph.
@@ -595,6 +630,7 @@ re-derivation upgrades a finding. The point is to re-derive, not to retract.
 
 | Load when | File |
 |---|---|
+| **Before scoping anything**: which obligations attach to this entity, public company requirements, contractual triggers | `references/regulatory-regimes.md` |
 | Starting any engagement: intake, document request list, risk-based planning, limitations language, when to hand off | `references/engagement-scoping.md` |
 | Any forensic posture, or any file that may be produced in a dispute | `references/evidence-and-custody.md` |
 | Internal posture: vouching, control testing, asset verification, authorization, compliance, value for money | `references/internal-audit-program.md` |
