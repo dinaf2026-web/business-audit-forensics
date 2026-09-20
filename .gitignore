@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Build and staging artifacts
+*.tmp
+staged/
+output/
+
+# NEVER commit client or engagement material.
+# This repository is public. Financial records, statements, ledgers, evidence
+# registers and reports contain confidential and often privileged information.
+intake/
+originals/
+working/
+evidence/
+testdata/
+*.xlsx
+*.xlsm
+*.docx
+*.pdf
+*.csv
+*.qbw
+*.qbm
+*.qbo
+findings.json
+report.json
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

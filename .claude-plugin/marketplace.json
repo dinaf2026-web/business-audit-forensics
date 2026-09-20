@@ -1,0 +1,13 @@
+{
+  "name": "dina-skills",
+  "owner": {
+    "name": "Dina Farhat"
+  },
+  "plugins": [
+    {
+      "name": "business-audit-forensics",
+      "source": "./",
+      "description": "Business financial audit and forensic accounting as a Claude skill. Internal audit and adversarial investigation, with scripts for evidence custody, reconciliation, roll-forward, and control-checked exception testing."
+    }
+  ]
+}

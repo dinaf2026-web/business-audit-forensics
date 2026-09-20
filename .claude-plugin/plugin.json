@@ -1,0 +1,23 @@
+{
+  "name": "business-audit-forensics",
+  "version": "0.1.0",
+  "description": "Examine a business's financial records and investigate them forensically. Runs two postures: internal audit (reconcile, test controls, vouch entries, verify assets, questions for the bookkeeper) and forensic investigation (chain of custody, fund tracing, competing-hypothesis testing, loss quantification, expert-report discipline). Built around one rule: a pattern is a hypothesis, not a finding, until it is corroborated against a source document outside the ledger. Includes scripts for an evidence register with tamper detection, two-directional reconciliation, prior-year roll-forward, and an exception battery where every test carries a positive control.",
+  "author": "Dina Farhat",
+  "homepage": "https://github.com/dinaf2026-web/business-audit-forensics",
+  "repository": "https://github.com/dinaf2026-web/business-audit-forensics",
+  "license": "MIT",
+  "keywords": [
+    "forensic-accounting",
+    "internal-audit",
+    "fraud-detection",
+    "financial-investigation",
+    "reconciliation",
+    "asset-tracing",
+    "litigation-support",
+    "expert-report",
+    "chain-of-custody",
+    "bookkeeping-review",
+    "quickbooks",
+    "claude-skill"
+  ]
+}
