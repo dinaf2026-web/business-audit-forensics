@@ -58,24 +58,24 @@ Run these at intake. Each "yes" attaches a regime.
 The Sarbanes-Oxley Act of 2002 is the centerpiece. The provisions that matter
 for this work:
 
-**Section 302 — certifications.** The CEO and CFO personally certify each
+**Section 302: certifications.** The CEO and CFO personally certify each
 periodic report: that they reviewed it, that it does not contain material
 misstatements or omissions, that the financial statements fairly present the
 condition and results, and that they are responsible for disclosure controls
 and have evaluated them. They also certify that they have disclosed to the
 auditors and the audit committee any significant control deficiencies, material
 weaknesses, and **any fraud involving management or employees with a
-significant role in internal control** — regardless of amount.
+significant role in internal control**, regardless of amount.
 
 That last clause is forensic. In a public company, fraud by anyone with a
 control role is a disclosure matter even when the dollars are trivial.
 
-**Section 404(a) — management's assessment.** Management must assess and report
+**Section 404(a): management's assessment.** Management must assess and report
 on the effectiveness of internal control over financial reporting (ICFR).
 **This applies to every filer.** There is no small-company exemption from
 404(a).
 
-**Section 404(b) — auditor attestation.** The registered public accounting firm
+**Section 404(b): auditor attestation.** The registered public accounting firm
 attests to and reports on ICFR effectiveness. **This is the part with
 exemptions**, and the distinction between (a) and (b) is the single most
 commonly confused point in this area:
@@ -96,7 +96,7 @@ definitions change. Confirm the current rule and the entity's current filer
 status before relying on any figure above.** Filer status is determined as of a
 measurement date and an entity can move between categories.)*
 
-**Section 802 — record retention and destruction.** Creates criminal liability
+**Section 802: record retention and destruction.** Creates criminal liability
 for destroying, altering, or falsifying records with intent to obstruct an
 investigation, and imposes retention requirements on audit workpapers. The
 retention periods differ between the statute and SEC rule, so **verify the
@@ -107,12 +107,12 @@ This is directly forensic and it reinforces a hard stop already in this skill:
 reasonably anticipated.** In a public company that exposure is criminal, not
 merely procedural.
 
-**Section 806 and Section 1107 — whistleblowers.** Protection from retaliation
+**Section 806 and Section 1107: whistleblowers.** Protection from retaliation
 for employees who report suspected fraud, and criminal liability for
 retaliating. If an engagement originates from an internal report, how the
 reporter is treated is itself a live issue. Flag it to counsel.
 
-**Exchange Act Section 10A — illegal acts.** Where an auditor becomes aware of
+**Exchange Act Section 10A: illegal acts.** Where an auditor becomes aware of
 information indicating a possible illegal act, a defined escalation path
 follows: to management, to the audit committee, and in some circumstances to
 the board and onward to the Commission. **Verify the current requirements and
@@ -127,13 +127,13 @@ practice that is almost always **COSO's Internal Control — Integrated
 Framework**, organized as five components, each supported by underlying
 principles, all of which must be present and functioning:
 
-1. **Control environment** — governance, integrity, competence, accountability
-2. **Risk assessment** — objectives, identifying and analyzing risk, including
+1. **Control environment:** governance, integrity, competence, accountability
+2. **Risk assessment:** objectives, identifying and analyzing risk, including
    **fraud risk** explicitly
-3. **Control activities** — the controls themselves, including over technology
-4. **Information and communication** — quality information, internal and
+3. **Control activities:** the controls themselves, including over technology
+4. **Information and communication:** quality information, internal and
    external communication
-5. **Monitoring** — ongoing and separate evaluations, and reporting deficiencies
+5. **Monitoring:** ongoing and separate evaluations, and reporting deficiencies
 
 **Verify the current framework version and its principle count** before citing
 it. Note the fraud-risk component: assessing fraud risk is a required part of

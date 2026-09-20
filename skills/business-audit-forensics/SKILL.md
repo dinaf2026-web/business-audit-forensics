@@ -258,7 +258,7 @@ look is never mistaken for a complete one.
 
 ---
 
-## Phase 0 — Scope and the independence gate
+## Phase 0: Scope and the independence gate
 
 Before touching data, settle these and write them down. They go into the report
 verbatim later, so getting them right now saves a rewrite.
@@ -352,7 +352,7 @@ Two practical consequences:
 
 ---
 
-## Phase 1 — Intake and evidence preservation
+## Phase 1: Intake and evidence preservation
 
 **Run this before reading anything substantive, in both postures.** It is
 cheap, and it cannot be done retroactively.
@@ -373,7 +373,7 @@ between postures, load `references/evidence-and-custody.md`.
 
 ---
 
-## Phase 2 — Rebuild the data and reconcile it
+## Phase 2: Rebuild the data and reconcile it
 
 This is the phase that produces real findings. Most engagements are won or lost
 here, and the two moves below are the ones people skip.
@@ -446,7 +446,7 @@ moved without a documented entry.
 
 ---
 
-## Phase 3 — Exception testing
+## Phase 3: Exception testing
 
 Run the analytics battery over the transaction table. The catalogue, the
 thresholds, and what each test is actually evidence of are in
@@ -493,7 +493,7 @@ corroboration gate.
 
 ---
 
-## Phase 3b — Build the picture
+## Phase 3b: Build the picture
 
 Exception tests produce a list. A list does not explain anything. Four analysis
 modes turn scattered exceptions into something a non-accountant can follow, and
@@ -529,7 +529,7 @@ Detail and worked patterns are in `references/exception-tests-and-schemes.md`.
 
 ---
 
-## Phase 3c — Interviews and inquiry
+## Phase 3c: Interviews and inquiry
 
 Records tell you what happened. People tell you why, and they frequently hand
 you the document you could not find.
@@ -559,7 +559,7 @@ Practical rules that hold whoever asks the questions:
 
 ---
 
-## Phase 4 — The corroboration gate
+## Phase 4: The corroboration gate
 
 **No item passes from exception to finding without clearing all five.** Write
 the answers in the workpaper, not in your head.
@@ -586,7 +586,7 @@ already spent time on the item. Effort spent is not evidence.
 
 ---
 
-## Phase 5 — Quantification
+## Phase 5: Quantification
 
 Only when the engagement calls for a number. Pick the model that answers the
 actual theory of the case, not the one that is easiest to compute. Tie every
@@ -598,7 +598,7 @@ fits, the mitigation and capacity tests, and the sensitivity presentation.
 
 ---
 
-## Phase 6 — Report and deliverables
+## Phase 6: Report and deliverables
 
 Every engagement produces at minimum:
 
@@ -625,7 +625,7 @@ Two writing rules worth stating here because they are violated constantly:
 
 ---
 
-## Phase 7 — Adversarial self-review
+## Phase 7: Adversarial self-review
 
 **Do not skip this.** A deliberate second pass over your own output finds more
 than the original pass did, and it costs a fraction. Re-derive each claim as
@@ -647,7 +647,7 @@ re-derivation upgrades a finding. The point is to re-derive, not to retract.
 
 ---
 
-## Reference files — load on demand, not all at once
+## Reference files: load on demand, not all at once
 
 | Load when | File |
 |---|---|
@@ -692,7 +692,7 @@ are analyzing is not the file you were given.
 
 ---
 
-## Hard stops — do not proceed, say so and wait
+## Hard stops: do not proceed, say so and wait
 
 - About to call something fraud, theft, embezzlement, or a breach of duty.
 - About to state a tax, legal, or regulatory consequence you have not verified

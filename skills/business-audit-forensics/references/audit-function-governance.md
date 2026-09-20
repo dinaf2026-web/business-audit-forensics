@@ -23,9 +23,9 @@ vocabulary that no longer exists.**
 **Verified against theiia.org on 19 September 2026:** the **Global Internal
 Audit Standards** were released 9 January 2024 and became **effective 9 January
 2025**, superseding the 2017 International Professional Practices Framework.
-The five separately named mandatory elements of the old framework — the Mission
+The five separately named mandatory elements of the old framework (the Mission
 of Internal Audit, the Definition of Internal Auditing, the Core Principles,
-the Code of Ethics, and the Standards — **no longer exist as separate
+the Code of Ethics, and the Standards) **no longer exist as separate
 entities.** Their content was incorporated into the Standards themselves.
 
 Practical consequences:
